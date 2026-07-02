@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import generateInterviewPDF from '../generatePDF'
 
 function Interview() {
   const [step, setStep] = useState('select')
@@ -12,9 +13,11 @@ function Interview() {
   const [interviewId, setInterviewId] = useState(null)
   const [loading, setLoading] = useState(false)
   const [score, setScore] = useState(null)
+  const [allAnswers, setAllAnswers] = useState([])
   const navigate = useNavigate()
 
   const token = localStorage.getItem('token')
+  const user = JSON.parse(localStorage.getItem('user') || '{}')
 
   // Start interview
   const startInterview = async (type) => {
@@ -55,6 +58,12 @@ function Interview() {
         { headers: { Authorization: `Bearer ${token}` } }
       )
       setFeedback(response.data)
+      setAllAnswers(prev => [...prev, {
+        question: questions[currentQuestion],
+        userAnswer: answer,
+        score: response.data.score,
+        aiFeedback: response.data.feedback
+      }])
       setStep('feedback')
     } catch (err) {
       alert('Failed to submit answer. Please try again!')
@@ -66,7 +75,6 @@ function Interview() {
   // Next question
   const nextQuestion = async () => {
     if (currentQuestion + 1 >= questions.length) {
-      // Complete interview
       try {
         const response = await axios.post(
           `${import.meta.env.VITE_API_URL}/api/interview/complete`,
@@ -84,6 +92,17 @@ function Interview() {
       setFeedback(null)
       setStep('interview')
     }
+  }
+
+  // Download PDF
+  const downloadPDF = () => {
+    generateInterviewPDF({
+      userName: user.name || 'Candidate',
+      interviewType,
+      date: new Date().toLocaleDateString(),
+      overallScore: score,
+      questions: allAnswers
+    })
   }
 
   // Select interview type screen
@@ -104,9 +123,7 @@ function Interview() {
 
           {loading ? (
             <div className="text-center py-20">
-              <p className="text-purple-400 text-xl">
-                Generating questions with AI...
-              </p>
+              <p className="text-purple-400 text-xl">Generating questions with AI...</p>
               <p className="text-gray-400 mt-2">Please wait...</p>
             </div>
           ) : (
@@ -146,7 +163,6 @@ function Interview() {
         </nav>
 
         <div className="max-w-2xl mx-auto px-6 py-10">
-          {/* Progress bar */}
           <div className="w-full bg-gray-800 rounded-full h-2 mb-8">
             <div
               className="bg-purple-600 h-2 rounded-full transition-all"
@@ -154,17 +170,13 @@ function Interview() {
             />
           </div>
 
-          {/* Question */}
           <div className="bg-gray-900 rounded-xl p-6 mb-6 border border-gray-800">
             <p className="text-sm text-purple-400 font-medium mb-3">
               {interviewType} Interview - Question {currentQuestion + 1}
             </p>
-            <p className="text-xl font-medium">
-              {questions[currentQuestion]}
-            </p>
+            <p className="text-xl font-medium">{questions[currentQuestion]}</p>
           </div>
 
-          {/* Answer */}
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
@@ -196,7 +208,6 @@ function Interview() {
         <div className="max-w-2xl mx-auto px-6 py-10">
           <h2 className="text-2xl font-bold mb-6">AI Feedback</h2>
 
-          {/* Score */}
           <div className="bg-gray-900 rounded-xl p-6 mb-4 border border-gray-800 text-center">
             <p className="text-gray-400 mb-2">Your Score</p>
             <p className="text-6xl font-bold text-purple-400">
@@ -205,17 +216,13 @@ function Interview() {
             </p>
           </div>
 
-          {/* Feedback */}
           <div className="bg-gray-900 rounded-xl p-6 mb-4 border border-gray-800">
             <h3 className="text-purple-400 font-semibold mb-2">Feedback</h3>
             <p className="text-gray-300">{feedback?.feedback}</p>
           </div>
 
-          {/* Improvements */}
           <div className="bg-gray-900 rounded-xl p-6 mb-6 border border-gray-800">
-            <h3 className="text-yellow-400 font-semibold mb-2">
-              Areas to Improve
-            </h3>
+            <h3 className="text-yellow-400 font-semibold mb-2">Areas to Improve</h3>
             <p className="text-gray-300">{feedback?.improvements}</p>
           </div>
 
@@ -223,9 +230,7 @@ function Interview() {
             onClick={nextQuestion}
             className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition"
           >
-            {currentQuestion + 1 >= questions.length
-              ? 'Complete Interview'
-              : 'Next Question'}
+            {currentQuestion + 1 >= questions.length ? 'Complete Interview' : 'Next Question'}
           </button>
         </div>
       </div>
@@ -244,7 +249,14 @@ function Interview() {
             {score}
             <span className="text-3xl text-gray-400">/10</span>
           </p>
-          <div className="flex gap-4 justify-center">
+
+          <div className="flex flex-col gap-4 justify-center max-w-sm mx-auto">
+            <button
+              onClick={downloadPDF}
+              className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-3 rounded-xl transition"
+            >
+              Download PDF Report
+            </button>
             <button
               onClick={() => navigate('/interview')}
               className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-xl transition"
@@ -264,4 +276,4 @@ function Interview() {
   }
 }
 
-export default Interview 
+export default Interview
