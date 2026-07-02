@@ -79,12 +79,20 @@ function Dashboard() {
           <p className="text-gray-400 mb-6">
             Ready to practice your interview skills today?
           </p>
-          <Link
-            to="/interview"
-            className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-lg transition inline-block"
-          >
-            Start New Interview
-          </Link>
+          <div className="flex gap-3 flex-wrap">
+            <Link
+              to="/interview"
+              className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-lg transition inline-block"
+            >
+              Start New Interview
+            </Link>
+            <Link
+              to="/resume-interview"
+              className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-3 rounded-lg transition inline-block"
+            >
+              Resume Based Interview
+            </Link>
+          </div>
         </div>
 
         {/* Stats */}
