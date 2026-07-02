@@ -2,31 +2,30 @@ const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth.middleware');
 const Interview = require('../models/Interview.model');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Groq = require('groq-sdk');
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // Start new interview
 router.post('/start', authMiddleware, async (req, res) => {
   try {
     const { interviewType } = req.body;
 
-    // Gemini se question generate karo
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
     const prompt = `Generate 5 ${interviewType} interview questions for a fresher. 
     Return ONLY a JSON array like this:
     ["question1", "question2", "question3", "question4", "question5"]
     No extra text, only JSON array.`;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    const completion = await groq.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.7,
+    });
 
-    // JSON parse karo
+    const responseText = completion.choices[0]?.message?.content || '';
     const cleanText = responseText.replace(/```json|```/g, '').trim();
     const questions = JSON.parse(cleanText);
 
-    // Database mein save karo
     const interview = new Interview({
       userId: req.userId,
       interviewType,
@@ -43,6 +42,7 @@ router.post('/start', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
+    console.log('START ERROR:', error.message);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -51,9 +51,6 @@ router.post('/start', authMiddleware, async (req, res) => {
 router.post('/answer', authMiddleware, async (req, res) => {
   try {
     const { interviewId, questionIndex, question, userAnswer } = req.body;
-
-    // Gemini se feedback lo
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const prompt = `You are an expert interviewer. 
     Question: "${question}"
@@ -67,13 +64,16 @@ router.post('/answer', authMiddleware, async (req, res) => {
     }
     Return ONLY JSON, no extra text.`;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    const completion = await groq.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.7,
+    });
 
+    const responseText = completion.choices[0]?.message?.content || '';
     const cleanText = responseText.replace(/```json|```/g, '').trim();
     const feedbackData = JSON.parse(cleanText);
 
-    // Database update karo
     const interview = await Interview.findById(interviewId);
     interview.questions[questionIndex].userAnswer = userAnswer;
     interview.questions[questionIndex].aiFeedback = feedbackData.feedback;
@@ -87,6 +87,7 @@ router.post('/answer', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
+    console.log('ANSWER ERROR:', error.message);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -98,7 +99,6 @@ router.post('/complete', authMiddleware, async (req, res) => {
 
     const interview = await Interview.findById(interviewId);
 
-    // Overall score calculate karo
     const totalScore = interview.questions.reduce((sum, q) => sum + (q.score || 0), 0);
     const overallScore = Math.round(totalScore / interview.questions.length);
 
@@ -113,6 +113,7 @@ router.post('/complete', authMiddleware, async (req, res) => {
     });
 
   } catch (error) {
+    console.log('COMPLETE ERROR:', error.message);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -128,6 +129,7 @@ router.get('/history', authMiddleware, async (req, res) => {
     res.json({ interviews });
 
   } catch (error) {
+    console.log('HISTORY ERROR:', error.message);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
