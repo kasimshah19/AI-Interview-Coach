@@ -8,7 +8,7 @@ const interviewSchema = new mongoose.Schema({
   },
   interviewType: {
     type: String,
-    enum: ['HR', 'Technical', 'Behavioral'],
+   enum: ['HR', 'Technical', 'Behavioral', 'Resume'],
     required: true
   },
   questions: [
