@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import generateInterviewPDF from '../generatePDF'
@@ -14,10 +14,81 @@ function Interview() {
   const [loading, setLoading] = useState(false)
   const [score, setScore] = useState(null)
   const [allAnswers, setAllAnswers] = useState([])
+  const [isListening, setIsListening] = useState(false)
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const recognitionRef = useRef(null)
   const navigate = useNavigate()
 
   const token = localStorage.getItem('token')
   const user = JSON.parse(localStorage.getItem('user') || '{}')
+
+  // Speech Synthesis - AI question bolega
+  const speakQuestion = (text) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.lang = 'en-US'
+      utterance.rate = 0.9
+      utterance.pitch = 1
+      utterance.onstart = () => setIsSpeaking(true)
+      utterance.onend = () => setIsSpeaking(false)
+      window.speechSynthesis.speak(utterance)
+    }
+  }
+
+  // Stop speaking
+  const stopSpeaking = () => {
+    window.speechSynthesis.cancel()
+    setIsSpeaking(false)
+  }
+
+  // Speech Recognition - User bolega
+  const startListening = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      alert('Your browser does not support voice input. Please use Chrome!')
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = 'en-US'
+    recognition.continuous = true
+    recognition.interimResults = true
+
+    recognition.onstart = () => setIsListening(true)
+
+    recognition.onresult = (event) => {
+      let finalTranscript = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript
+        }
+      }
+      if (finalTranscript) {
+        setAnswer(prev => prev + ' ' + finalTranscript)
+      }
+    }
+
+    recognition.onerror = () => setIsListening(false)
+    recognition.onend = () => setIsListening(false)
+
+    recognitionRef.current = recognition
+    recognition.start()
+  }
+
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop()
+    }
+    setIsListening(false)
+  }
+
+  // Auto speak question when interview starts
+  useEffect(() => {
+    if (step === 'interview' && questions[currentQuestion]) {
+      setTimeout(() => speakQuestion(questions[currentQuestion]), 500)
+    }
+  }, [step, currentQuestion])
 
   // Start interview
   const startInterview = async (type) => {
@@ -42,9 +113,11 @@ function Interview() {
   // Submit answer
   const submitAnswer = async () => {
     if (!answer.trim()) {
-      alert('Please write your answer first!')
+      alert('Please write or speak your answer first!')
       return
     }
+    stopListening()
+    stopSpeaking()
     setLoading(true)
     try {
       const response = await axios.post(
@@ -105,22 +178,18 @@ function Interview() {
     })
   }
 
-  // Select interview type screen
+  // Select screen
   if (step === 'select') {
     return (
       <div className="min-h-screen bg-gray-950 text-white">
         <nav className="bg-gray-900 border-b border-gray-800 px-6 py-4">
           <h1 className="text-xl font-bold text-purple-400">AI Interview Coach</h1>
         </nav>
-
         <div className="max-w-2xl mx-auto px-6 py-10">
-          <h2 className="text-3xl font-bold text-center mb-2">
-            Select Interview Type
-          </h2>
+          <h2 className="text-3xl font-bold text-center mb-2">Select Interview Type</h2>
           <p className="text-gray-400 text-center mb-10">
             Choose the type of interview you want to practice
           </p>
-
           {loading ? (
             <div className="text-center py-20">
               <p className="text-purple-400 text-xl">Generating questions with AI...</p>
@@ -157,9 +226,7 @@ function Interview() {
       <div className="min-h-screen bg-gray-950 text-white">
         <nav className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex justify-between items-center">
           <h1 className="text-xl font-bold text-purple-400">AI Interview Coach</h1>
-          <span className="text-gray-400">
-            Question {currentQuestion + 1} of {questions.length}
-          </span>
+          <span className="text-gray-400">Question {currentQuestion + 1} of {questions.length}</span>
         </nav>
 
         <div className="max-w-2xl mx-auto px-6 py-10">
@@ -170,20 +237,61 @@ function Interview() {
             />
           </div>
 
-          <div className="bg-gray-900 rounded-xl p-6 mb-6 border border-gray-800">
+          {/* Question box */}
+          <div className="bg-gray-900 rounded-xl p-6 mb-4 border border-gray-800">
             <p className="text-sm text-purple-400 font-medium mb-3">
               {interviewType} Interview - Question {currentQuestion + 1}
             </p>
-            <p className="text-xl font-medium">{questions[currentQuestion]}</p>
+            <p className="text-xl font-medium mb-4">{questions[currentQuestion]}</p>
+
+            {/* Speaker button */}
+            <button
+              onClick={() => isSpeaking ? stopSpeaking() : speakQuestion(questions[currentQuestion])}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
+                isSpeaking
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+              }`}
+            >
+              {isSpeaking ? '🔇 Stop Speaking' : '🔊 Hear Question'}
+            </button>
           </div>
 
+          {/* Answer box */}
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
-            placeholder="Type your answer here..."
-            rows={6}
+            placeholder="Type your answer here or use the microphone below..."
+            rows={5}
             className="w-full bg-gray-900 text-white px-4 py-3 rounded-xl border border-gray-700 focus:outline-none focus:border-purple-500 resize-none mb-4"
           />
+
+          {/* Voice input button */}
+          <div className="flex gap-3 mb-4">
+            <button
+              onClick={() => isListening ? stopListening() : startListening()}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold transition ${
+                isListening
+                  ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse'
+                  : 'bg-gray-700 hover:bg-gray-600 text-white'
+              }`}
+            >
+              {isListening ? '🔴 Stop Recording' : '🎤 Speak Answer'}
+            </button>
+
+            <button
+              onClick={() => setAnswer('')}
+              className="px-4 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-400 transition"
+            >
+              Clear
+            </button>
+          </div>
+
+          {isListening && (
+            <div className="bg-red-900/20 border border-red-500 rounded-xl p-3 mb-4 text-center">
+              <p className="text-red-400 text-sm animate-pulse">🎙️ Listening... Speak now!</p>
+            </div>
+          )}
 
           <button
             onClick={submitAnswer}
@@ -204,28 +312,22 @@ function Interview() {
         <nav className="bg-gray-900 border-b border-gray-800 px-6 py-4">
           <h1 className="text-xl font-bold text-purple-400">AI Interview Coach</h1>
         </nav>
-
         <div className="max-w-2xl mx-auto px-6 py-10">
           <h2 className="text-2xl font-bold mb-6">AI Feedback</h2>
-
           <div className="bg-gray-900 rounded-xl p-6 mb-4 border border-gray-800 text-center">
             <p className="text-gray-400 mb-2">Your Score</p>
             <p className="text-6xl font-bold text-purple-400">
-              {feedback?.score}
-              <span className="text-2xl text-gray-400">/10</span>
+              {feedback?.score}<span className="text-2xl text-gray-400">/10</span>
             </p>
           </div>
-
           <div className="bg-gray-900 rounded-xl p-6 mb-4 border border-gray-800">
             <h3 className="text-purple-400 font-semibold mb-2">Feedback</h3>
             <p className="text-gray-300">{feedback?.feedback}</p>
           </div>
-
           <div className="bg-gray-900 rounded-xl p-6 mb-6 border border-gray-800">
             <h3 className="text-yellow-400 font-semibold mb-2">Areas to Improve</h3>
             <p className="text-gray-300">{feedback?.improvements}</p>
           </div>
-
           <button
             onClick={nextQuestion}
             className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition"
@@ -246,11 +348,9 @@ function Interview() {
           <h2 className="text-4xl font-bold mb-4">Interview Complete!</h2>
           <p className="text-gray-400 mb-6">Your overall score</p>
           <p className="text-8xl font-bold text-purple-400 mb-8">
-            {score}
-            <span className="text-3xl text-gray-400">/10</span>
+            {score}<span className="text-3xl text-gray-400">/10</span>
           </p>
-
-          <div className="flex flex-col gap-4 justify-center max-w-sm mx-auto">
+          <div className="flex flex-col gap-4 max-w-sm mx-auto">
             <button
               onClick={downloadPDF}
               className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-3 rounded-xl transition"
