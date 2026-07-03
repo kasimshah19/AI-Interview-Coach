@@ -4,7 +4,7 @@ const authMiddleware = require('../middleware/auth.middleware');
 const Interview = require('../models/Interview.model');
 const Groq = require('groq-sdk');
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // Start new interview
 router.post('/start', authMiddleware, async (req, res) => {
@@ -16,7 +16,7 @@ router.post('/start', authMiddleware, async (req, res) => {
     ["question1", "question2", "question3", "question4", "question5"]
     No extra text, only JSON array.`;
 
-    const completion = await groq.chat.completions.create({
+    const completion = await getGroq().chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
       model: 'llama-3.3-70b-versatile',
       temperature: 0.7,
@@ -64,7 +64,7 @@ router.post('/answer', authMiddleware, async (req, res) => {
     }
     Return ONLY JSON, no extra text.`;
 
-    const completion = await groq.chat.completions.create({
+    const completion = await getGroq().chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
       model: 'llama-3.3-70b-versatile',
       temperature: 0.7,
