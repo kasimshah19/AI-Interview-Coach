@@ -43,7 +43,6 @@ function Dashboard() {
     navigate('/login')
   }
 
-  // Chart data prepare
   const chartData = history.map((interview, index) => ({
     name: `#${index + 1} ${interview.interviewType}`,
     score: interview.overallScore,
@@ -93,19 +92,93 @@ function Dashboard() {
           <h2 className="text-3xl font-bold mb-2">Welcome back, {user?.name}! 👋</h2>
           <p className="text-gray-400 mb-6">Ready to practice your interview skills today?</p>
           <div className="flex gap-3 flex-wrap">
-            <Link
-              to="/interview"
-              className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-lg transition inline-block"
-            >
+            <Link to="/interview" className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-lg transition inline-block">
               Start New Interview
             </Link>
-            <Link
-              to="/resume-interview"
-              className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-3 rounded-lg transition inline-block"
-            >
+            <Link to="/resume-interview" className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-3 rounded-lg transition inline-block">
               Resume Based Interview
             </Link>
+            <Link to="/company-interview" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition inline-block">
+              🏢 Company Interview
+            </Link>
           </div>
+        </div>
+
+        {/* Quick Action Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+
+          {/* Profile Card */}
+          <Link to="/profile" className="bg-gray-900 border border-gray-800 hover:border-purple-500/50 rounded-2xl p-6 transition group">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-purple-900/40 border-2 border-purple-500/30 flex items-center justify-center text-2xl group-hover:border-purple-500 transition">
+                👤
+              </div>
+              <div>
+                <p className="font-semibold text-lg group-hover:text-purple-400 transition">My Profile</p>
+                <p className="text-gray-400 text-sm">Update skills, experience & preferences</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="bg-purple-900/30 text-purple-400 text-xs px-3 py-1 rounded-full border border-purple-700/30">📊 View Stats</span>
+              <span className="bg-purple-900/30 text-purple-400 text-xs px-3 py-1 rounded-full border border-purple-700/30">🎯 Set Goals</span>
+              <span className="bg-purple-900/30 text-purple-400 text-xs px-3 py-1 rounded-full border border-purple-700/30">📄 Upload Resume</span>
+            </div>
+          </Link>
+
+          {/* Company Interview Card */}
+          <Link to="/company-interview" className="bg-gray-900 border border-gray-800 hover:border-blue-500/50 rounded-2xl p-6 transition group">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-blue-900/40 border-2 border-blue-500/30 flex items-center justify-center text-2xl group-hover:border-blue-500 transition">
+                🏢
+              </div>
+              <div>
+                <p className="font-semibold text-lg group-hover:text-blue-400 transition">Company Interview</p>
+                <p className="text-gray-400 text-sm">Practice for specific companies</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="bg-blue-900/30 text-blue-400 text-xs px-3 py-1 rounded-full border border-blue-700/30">🔵 Google</span>
+              <span className="bg-blue-900/30 text-blue-400 text-xs px-3 py-1 rounded-full border border-blue-700/30">📦 Amazon</span>
+              <span className="bg-blue-900/30 text-blue-400 text-xs px-3 py-1 rounded-full border border-blue-700/30">🏢 TCS</span>
+            </div>
+          </Link>
+
+          {/* Leaderboard Card */}
+          <Link to="/leaderboard" className="bg-gray-900 border border-gray-800 hover:border-yellow-500/50 rounded-2xl p-6 transition group">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-yellow-900/40 border-2 border-yellow-500/30 flex items-center justify-center text-2xl group-hover:border-yellow-500 transition">
+                🏆
+              </div>
+              <div>
+                <p className="font-semibold text-lg group-hover:text-yellow-400 transition">Leaderboard</p>
+                <p className="text-gray-400 text-sm">See your rank among all users</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="bg-yellow-900/30 text-yellow-400 text-xs px-3 py-1 rounded-full border border-yellow-700/30">🥇 Top Ranks</span>
+              <span className="bg-yellow-900/30 text-yellow-400 text-xs px-3 py-1 rounded-full border border-yellow-700/30">📊 Compare Scores</span>
+              <span className="bg-yellow-900/30 text-yellow-400 text-xs px-3 py-1 rounded-full border border-yellow-700/30">🎯 My Rank</span>
+            </div>
+          </Link>
+
+          {/* Quick Practice Card */}
+          <Link to="/interview" className="bg-gray-900 border border-gray-800 hover:border-green-500/50 rounded-2xl p-6 transition group">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-green-900/40 border-2 border-green-500/30 flex items-center justify-center text-2xl group-hover:border-green-500 transition">
+                🎯
+              </div>
+              <div>
+                <p className="font-semibold text-lg group-hover:text-green-400 transition">Quick Practice</p>
+                <p className="text-gray-400 text-sm">Jump into an interview right now</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="bg-green-900/30 text-green-400 text-xs px-3 py-1 rounded-full border border-green-700/30">👔 HR</span>
+              <span className="bg-green-900/30 text-green-400 text-xs px-3 py-1 rounded-full border border-green-700/30">💻 Technical</span>
+              <span className="bg-green-900/30 text-green-400 text-xs px-3 py-1 rounded-full border border-green-700/30">🧠 Behavioral</span>
+            </div>
+          </Link>
+
         </div>
 
         {/* Stats */}
@@ -132,7 +205,7 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* Line Chart - Progress */}
+        {/* Line Chart */}
         {history.length > 1 && (
           <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 mb-6">
             <h3 className="text-xl font-bold mb-6">Score Progress</h3>
@@ -145,20 +218,13 @@ function Dashboard() {
                   contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
                   labelStyle={{ color: '#e5e7eb' }}
                 />
-                <Line
-                  type="monotone"
-                  dataKey="score"
-                  stroke="#8b5cf6"
-                  strokeWidth={2}
-                  dot={{ fill: '#8b5cf6', r: 5 }}
-                  activeDot={{ r: 7 }}
-                />
+                <Line type="monotone" dataKey="score" stroke="#8b5cf6" strokeWidth={2} dot={{ fill: '#8b5cf6', r: 5 }} activeDot={{ r: 7 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
         )}
 
-        {/* Bar Chart - By Type */}
+        {/* Bar Chart */}
         {typeData.length > 0 && (
           <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 mb-6">
             <h3 className="text-xl font-bold mb-6">Average Score by Interview Type</h3>
@@ -183,30 +249,20 @@ function Dashboard() {
           {history.length === 0 ? (
             <div className="text-center py-10">
               <p className="text-gray-400 text-lg mb-4">No interviews yet!</p>
-              <Link
-                to="/interview"
-                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg transition inline-block"
-              >
+              <Link to="/interview" className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg transition inline-block">
                 Start Your First Interview
               </Link>
             </div>
           ) : (
             <div className="space-y-3">
               {history.map((interview, index) => (
-                <div
-                  key={index}
-                  className="bg-gray-800 rounded-lg p-4 flex justify-between items-center"
-                >
+                <div key={index} className="bg-gray-800 rounded-lg p-4 flex justify-between items-center">
                   <div>
                     <p className="font-medium">{interview.interviewType} Interview</p>
-                    <p className="text-gray-400 text-sm">
-                      {new Date(interview.createdAt).toLocaleDateString()}
-                    </p>
+                    <p className="text-gray-400 text-sm">{new Date(interview.createdAt).toLocaleDateString()}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-green-400">
-                      {interview.overallScore}/10
-                    </p>
+                    <p className="text-2xl font-bold text-green-400">{interview.overallScore}/10</p>
                     <p className="text-gray-400 text-sm">{interview.totalQuestions} questions</p>
                   </div>
                 </div>

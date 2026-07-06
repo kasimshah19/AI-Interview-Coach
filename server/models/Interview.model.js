@@ -8,8 +8,22 @@ const interviewSchema = new mongoose.Schema({
   },
   interviewType: {
     type: String,
-   enum: ['HR', 'Technical', 'Behavioral', 'Resume'],
+    enum: [
+      'HR', 'Technical', 'Behavioral', 'Resume',
+      'Google', 'Amazon', 'Microsoft', 'TCS',
+      'Infosys', 'Wipro', 'Accenture', 'Flipkart',
+      'Meta', 'Apple', 'Netflix'
+    ],
     required: true
+  },
+  difficulty: {
+    type: String,
+    enum: ['Beginner', 'Intermediate', 'Advanced', 'Expert'],
+    default: 'Beginner'
+  },
+  categories: {
+    type: [String],
+    default: []
   },
   questions: [
     {

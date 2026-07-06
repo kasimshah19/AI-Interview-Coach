@@ -18,6 +18,15 @@ const userSchema = new mongoose.Schema({
     required: true,
     minlength: 6
   },
+  // Profile fields
+  fullName: { type: String, default: '' },
+  bio: { type: String, default: '' },
+  targetJobRole: { type: String, default: '' },
+  experienceLevel: { type: String, default: 'fresher' },
+  preferredLanguage: { type: String, default: 'english' },
+  skills: { type: [String], default: [] },
+  photoUrl: { type: String, default: '' },
+  resumeName: { type: String, default: '' },
   createdAt: {
     type: Date,
     default: Date.now

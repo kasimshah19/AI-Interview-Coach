@@ -6,12 +6,26 @@ const Groq = require('groq-sdk');
 
 const getGroq = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
 
+const DIFFICULTY_PROMPTS = {
+  Beginner: 'for a complete fresher with no work experience. Keep questions simple and basic.',
+  Intermediate: 'for someone with 1-3 years of work experience. Ask moderate level questions.',
+  Advanced: 'for a professional with 3-5 years of experience. Ask complex and detailed questions.',
+  Expert: 'for a senior professional with 5+ years of experience. Ask highly challenging and scenario-based questions.'
+}
+
 // Start new interview
 router.post('/start', authMiddleware, async (req, res) => {
   try {
-    const { interviewType } = req.body;
+    const { interviewType, difficulty, categories } = req.body;
 
-    const prompt = `Generate 5 ${interviewType} interview questions for a fresher. 
+    const difficultyText = DIFFICULTY_PROMPTS[difficulty] || DIFFICULTY_PROMPTS.Beginner
+
+    const categoriesText = categories && categories.length > 0
+      ? `Focus specifically on these topics: ${categories.join(', ')}.`
+      : ''
+
+    const prompt = `Generate 5 ${interviewType} interview questions ${difficultyText}
+    ${categoriesText}
     Return ONLY a JSON array like this:
     ["question1", "question2", "question3", "question4", "question5"]
     No extra text, only JSON array.`;
@@ -29,6 +43,8 @@ router.post('/start', authMiddleware, async (req, res) => {
     const interview = new Interview({
       userId: req.userId,
       interviewType,
+      difficulty: difficulty || 'Beginner',
+      categories: categories || [],
       questions: questions.map(q => ({ question: q })),
       totalQuestions: questions.length
     });
