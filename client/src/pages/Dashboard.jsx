@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import axios from 'axios'
+import { useTheme } from '../App'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, BarChart, Bar
@@ -11,6 +12,7 @@ function Dashboard() {
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
+  const { isDark, toggleTheme } = useTheme()
 
   useEffect(() => {
     const userData = localStorage.getItem('user')
@@ -76,6 +78,13 @@ function Dashboard() {
         <h1 className="text-xl font-bold text-purple-400">AI Interview Coach</h1>
         <div className="flex items-center gap-4">
           <span className="text-gray-400">Hello, {user?.name}!</span>
+          <button
+            onClick={toggleTheme}
+            className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm transition"
+            title="Toggle Dark/Light Mode"
+          >
+            {isDark ? '☀️' : '🌙'}
+          </button>
           <button
             onClick={handleLogout}
             className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm transition"
@@ -158,6 +167,23 @@ function Dashboard() {
               <span className="bg-yellow-900/30 text-yellow-400 text-xs px-3 py-1 rounded-full border border-yellow-700/30">🥇 Top Ranks</span>
               <span className="bg-yellow-900/30 text-yellow-400 text-xs px-3 py-1 rounded-full border border-yellow-700/30">📊 Compare Scores</span>
               <span className="bg-yellow-900/30 text-yellow-400 text-xs px-3 py-1 rounded-full border border-yellow-700/30">🎯 My Rank</span>
+            </div>
+          </Link>
+
+          {/* Schedule Card */}
+          <Link to="/schedule" className="bg-gray-900 border border-gray-800 hover:border-purple-500/50 rounded-2xl p-6 transition group">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-purple-900/40 border-2 border-purple-500/30 flex items-center justify-center text-2xl group-hover:border-purple-500 transition">
+                📅
+              </div>
+              <div>
+                <p className="font-semibold text-lg group-hover:text-purple-400 transition">Schedule</p>
+                <p className="text-gray-400 text-sm">Plan your practice sessions</p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="bg-purple-900/30 text-purple-400 text-xs px-3 py-1 rounded-full border border-purple-700/30">⏰ Reminders</span>
+              <span className="bg-purple-900/30 text-purple-400 text-xs px-3 py-1 rounded-full border border-purple-700/30">📧 Email Alert</span>
             </div>
           </Link>
 
