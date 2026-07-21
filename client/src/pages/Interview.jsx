@@ -131,12 +131,90 @@ function Interview() {
   const [showTimeUp, setShowTimeUp] = useState(false)
   const [timerActive, setTimerActive] = useState(false)
 
+  // Video states
+  const [videoEnabled, setVideoEnabled] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordedVideoUrl, setRecordedVideoUrl] = useState(null)
+  const [cameraError, setCameraError] = useState('')
+
   const recognitionRef = useRef(null)
   const timerRef = useRef(null)
+  const videoRef = useRef(null)
+  const mediaRecorderRef = useRef(null)
+  const streamRef = useRef(null)
+  const chunksRef = useRef([])
   const navigate = useNavigate()
 
   const token = localStorage.getItem('token')
   const user = JSON.parse(localStorage.getItem('user') || '{}')
+
+  // Start Camera
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true
+      })
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+      }
+      setVideoEnabled(true)
+      setCameraError('')
+
+      // Start recording
+      chunksRef.current = []
+      const recorder = new MediaRecorder(stream)
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data)
+      }
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'video/webm' })
+        const url = URL.createObjectURL(blob)
+        setRecordedVideoUrl(url)
+      }
+      recorder.start()
+      mediaRecorderRef.current = recorder
+      setIsRecording(true)
+    } catch (err) {
+      setCameraError('Camera access denied. Please allow camera permission.')
+      setVideoEnabled(false)
+    }
+  }
+
+  // Stop Camera
+  const stopCamera = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+    setIsRecording(false)
+    setVideoEnabled(false)
+  }
+
+  // Download Video
+  const downloadVideo = () => {
+    if (!recordedVideoUrl) return
+    const a = document.createElement('a')
+    a.href = recordedVideoUrl
+    a.download = `interview-${interviewType}-${new Date().toLocaleDateString()}.webm`
+    a.click()
+  }
+
+  // Cleanup camera on unmount
+  useEffect(() => {
+    return () => { stopCamera() }
+  }, [])
+
+  // Attach stream to video element when videoEnabled changes
+  useEffect(() => {
+    if (videoEnabled && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+    }
+  }, [videoEnabled, step])
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
@@ -239,7 +317,6 @@ function Interview() {
     }
   }, [step, currentQuestion])
 
-  // Toggle category selection
   const toggleCategory = (categoryId) => {
     setSelectedCategories(prev =>
       prev.includes(categoryId)
@@ -253,7 +330,6 @@ function Interview() {
     setSelectedCategories(allIds)
   }
 
-  // Start interview
   const startInterview = async (type) => {
     setLoading(true)
     setInterviewType(type)
@@ -310,6 +386,7 @@ function Interview() {
   }
 
   const completeInterview = async () => {
+    stopCamera()
     try {
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL}/api/interview/complete`,
@@ -374,17 +451,13 @@ function Interview() {
               >
                 <div className="flex justify-between items-center">
                   <div>
-                    <h3 className="text-xl font-bold group-hover:text-purple-400 transition">
-                      {type} Interview
-                    </h3>
+                    <h3 className="text-xl font-bold group-hover:text-purple-400 transition">{type} Interview</h3>
                     <p className="text-gray-400 mt-1 text-sm">
                       {type === 'HR' && 'General HR questions about yourself and career goals'}
                       {type === 'Technical' && 'Technical questions related to your field'}
                       {type === 'Behavioral' && 'Situational and behavioral questions'}
                     </p>
-                    <p className="text-purple-500 text-xs mt-2">
-                      {CATEGORIES[type]?.length} categories available →
-                    </p>
+                    <p className="text-purple-500 text-xs mt-2">{CATEGORIES[type]?.length} categories available →</p>
                   </div>
                   <div className="text-right">
                     <p className="text-purple-400 font-bold">
@@ -409,77 +482,48 @@ function Interview() {
     return (
       <div className="min-h-screen bg-gray-950 text-white">
         <nav className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center gap-4">
-          <button onClick={() => setStep('select')} className="text-gray-400 hover:text-white transition">
-            ← Back
-          </button>
+          <button onClick={() => setStep('select')} className="text-gray-400 hover:text-white transition">← Back</button>
           <h1 className="text-xl font-bold text-purple-400">AI Interview Coach</h1>
         </nav>
-
         <div className="max-w-2xl mx-auto px-6 py-10">
           <div className="text-center mb-8">
             <p className="text-purple-400 text-sm font-medium mb-1">{interviewType} Interview</p>
             <h2 className="text-3xl font-bold mb-2">Select Categories</h2>
             <p className="text-gray-400">Choose one or multiple categories to practice</p>
           </div>
-
-          {/* Select All button */}
           <div className="flex justify-between items-center mb-4">
             <p className="text-gray-400 text-sm">
-              {selectedCategories.length === 0
-                ? 'No category selected — all will be included'
-                : `${selectedCategories.length} selected`}
+              {selectedCategories.length === 0 ? 'No category selected — all will be included' : `${selectedCategories.length} selected`}
             </p>
             <div className="flex gap-2">
-              <button
-                onClick={selectAllCategories}
-                className="text-xs text-purple-400 hover:text-purple-300 border border-purple-500/30 px-3 py-1 rounded-full transition"
-              >
+              <button onClick={selectAllCategories} className="text-xs text-purple-400 hover:text-purple-300 border border-purple-500/30 px-3 py-1 rounded-full transition">
                 Select All
               </button>
               {selectedCategories.length > 0 && (
-                <button
-                  onClick={() => setSelectedCategories([])}
-                  className="text-xs text-gray-400 hover:text-white border border-gray-600 px-3 py-1 rounded-full transition"
-                >
+                <button onClick={() => setSelectedCategories([])} className="text-xs text-gray-400 hover:text-white border border-gray-600 px-3 py-1 rounded-full transition">
                   Clear
                 </button>
               )}
             </div>
           </div>
-
-          {/* Category Cards */}
           <div className="grid grid-cols-2 gap-4 mb-8">
             {availableCategories.map((cat) => {
               const isSelected = selectedCategories.includes(cat.id)
               return (
-                <button
-                  key={cat.id}
-                  onClick={() => toggleCategory(cat.id)}
-                  className={`text-left p-5 rounded-xl border-2 transition hover:scale-[1.02] ${
-                    isSelected
-                      ? 'border-purple-500 bg-purple-900/20'
-                      : 'border-gray-700 bg-gray-900 hover:border-gray-500'
-                  }`}
+                <button key={cat.id} onClick={() => toggleCategory(cat.id)}
+                  className={`text-left p-5 rounded-xl border-2 transition hover:scale-[1.02] ${isSelected ? 'border-purple-500 bg-purple-900/20' : 'border-gray-700 bg-gray-900 hover:border-gray-500'}`}
                 >
                   <div className="flex items-start justify-between mb-2">
                     <span className="text-3xl">{cat.icon}</span>
-                    {isSelected && (
-                      <span className="text-xs bg-purple-600 text-white px-2 py-0.5 rounded-full">✓</span>
-                    )}
+                    {isSelected && <span className="text-xs bg-purple-600 text-white px-2 py-0.5 rounded-full">✓</span>}
                   </div>
-                  <p className={`font-semibold text-sm mb-1 ${isSelected ? 'text-purple-400' : 'text-white'}`}>
-                    {cat.label}
-                  </p>
+                  <p className={`font-semibold text-sm mb-1 ${isSelected ? 'text-purple-400' : 'text-white'}`}>{cat.label}</p>
                   <p className="text-gray-500 text-xs">{cat.desc}</p>
                 </button>
               )
             })}
           </div>
-
-          <button
-            onClick={() => setStep('difficulty')}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition"
-          >
+          <button onClick={() => setStep('difficulty')} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition">
             Continue → Select Difficulty
           </button>
         </div>
@@ -492,12 +536,9 @@ function Interview() {
     return (
       <div className="min-h-screen bg-gray-950 text-white">
         <nav className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center gap-4">
-          <button onClick={() => setStep('category')} className="text-gray-400 hover:text-white transition">
-            ← Back
-          </button>
+          <button onClick={() => setStep('category')} className="text-gray-400 hover:text-white transition">← Back</button>
           <h1 className="text-xl font-bold text-purple-400">AI Interview Coach</h1>
         </nav>
-
         <div className="max-w-2xl mx-auto px-6 py-10">
           <div className="text-center mb-6">
             <p className="text-purple-400 text-sm font-medium mb-1">{interviewType} Interview</p>
@@ -516,18 +557,11 @@ function Interview() {
             <h2 className="text-3xl font-bold mb-2">Select Difficulty Level</h2>
             <p className="text-gray-400">AI will generate questions based on your selected level</p>
           </div>
-
           <div className="grid gap-4">
             {Object.entries(DIFFICULTY_CONFIG).map(([key, config]) => (
-              <button
-                key={key}
-                onClick={() => {
-                  setDifficulty(key)
-                  startInterview(interviewType)
-                }}
-                className={`text-left p-6 rounded-xl border-2 transition hover:scale-[1.01] ${
-                  difficulty === key ? `${config.border} ${config.bg}` : 'border-gray-700 bg-gray-900 hover:border-gray-500'
-                }`}
+              <button key={key}
+                onClick={() => { setDifficulty(key); startInterview(interviewType) }}
+                className={`text-left p-6 rounded-xl border-2 transition hover:scale-[1.01] ${difficulty === key ? `${config.border} ${config.bg}` : 'border-gray-700 bg-gray-900 hover:border-gray-500'}`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -548,7 +582,6 @@ function Interview() {
               </button>
             ))}
           </div>
-
           {loading && (
             <div className="text-center py-10 mt-6">
               <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -569,9 +602,32 @@ function Interview() {
 
         {isWarning && (
           <div className="fixed top-0 left-0 right-0 bg-red-600/20 border-b border-red-500 py-2 text-center z-40">
-            <p className="text-red-400 font-semibold animate-pulse">
-              ⚠️ Only {timeLeft} seconds remaining! Submit your answer now!
-            </p>
+            <p className="text-red-400 font-semibold animate-pulse">⚠️ Only {timeLeft} seconds remaining! Submit your answer now!</p>
+          </div>
+        )}
+
+        {/* Video Preview — fixed bottom right corner */}
+        {videoEnabled && (
+          <div className="fixed bottom-6 right-6 z-50">
+            <div className="relative">
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-72 h-52 rounded-2xl border-2 border-purple-500 object-cover shadow-2xl bg-black"
+              />
+              <div className="absolute top-2 left-2 flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+                <span className="text-xs text-white font-medium bg-black/50 px-1 rounded">REC</span>
+              </div>
+              <button
+                onClick={stopCamera}
+                className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white text-xs px-2 py-0.5 rounded-full transition"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         )}
 
@@ -581,6 +637,17 @@ function Interview() {
             <span className={`text-xs px-3 py-1 rounded-full border font-medium ${diffConfig.badge}`}>
               {diffConfig.icon} {difficulty}
             </span>
+            {/* Camera Toggle Button */}
+            <button
+              onClick={videoEnabled ? stopCamera : startCamera}
+              className={`text-xs px-3 py-1 rounded-full border font-medium transition ${
+                videoEnabled
+                  ? 'bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30'
+                  : 'bg-gray-800 text-gray-400 border-gray-600 hover:border-purple-500 hover:text-purple-400'
+              }`}
+            >
+              {videoEnabled ? '📹 Stop Camera' : '📷 Start Camera'}
+            </button>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-gray-400">Question {currentQuestion + 1} of {questions.length}</span>
@@ -588,29 +655,27 @@ function Interview() {
           </div>
         </nav>
 
+        {cameraError && (
+          <div className="bg-red-900/20 border-b border-red-500/30 px-6 py-2 text-center">
+            <p className="text-red-400 text-sm">⚠️ {cameraError}</p>
+          </div>
+        )}
+
         <div className="max-w-2xl mx-auto px-6 py-8">
           <div className="w-full bg-gray-800 rounded-full h-2 mb-6">
-            <div
-              className="bg-purple-600 h-2 rounded-full transition-all"
-              style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
-            />
+            <div className="bg-purple-600 h-2 rounded-full transition-all"
+              style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }} />
           </div>
 
           <div className={`rounded-xl p-6 mb-4 border transition-all ${isWarning ? 'bg-red-900/10 border-red-500/30' : 'bg-gray-900 border-gray-800'}`}>
             <div className="flex items-center gap-2 mb-3 flex-wrap">
-              <p className="text-sm text-purple-400 font-medium">
-                {interviewType} Interview - Question {currentQuestion + 1}
-              </p>
-              <span className={`text-xs px-2 py-0.5 rounded-full border ${diffConfig.badge}`}>
-                {diffConfig.icon} {difficulty}
-              </span>
+              <p className="text-sm text-purple-400 font-medium">{interviewType} Interview - Question {currentQuestion + 1}</p>
+              <span className={`text-xs px-2 py-0.5 rounded-full border ${diffConfig.badge}`}>{diffConfig.icon} {difficulty}</span>
             </div>
             <p className="text-xl font-medium mb-4">{questions[currentQuestion]}</p>
             <button
               onClick={() => isSpeaking ? stopSpeaking() : speakQuestion(questions[currentQuestion])}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
-                isSpeaking ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${isSpeaking ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}
             >
               {isSpeaking ? '🔇 Stop Speaking' : '🔊 Hear Question'}
             </button>
@@ -621,17 +686,13 @@ function Interview() {
             onChange={(e) => setAnswer(e.target.value)}
             placeholder="Type your answer here or use the microphone below..."
             rows={5}
-            className={`w-full text-white px-4 py-3 rounded-xl border focus:outline-none resize-none mb-4 transition-all ${
-              isWarning ? 'bg-red-900/10 border-red-500/50 focus:border-red-400' : 'bg-gray-900 border-gray-700 focus:border-purple-500'
-            }`}
+            className={`w-full text-white px-4 py-3 rounded-xl border focus:outline-none resize-none mb-4 transition-all ${isWarning ? 'bg-red-900/10 border-red-500/50 focus:border-red-400' : 'bg-gray-900 border-gray-700 focus:border-purple-500'}`}
           />
 
           <div className="flex gap-3 mb-4">
             <button
               onClick={() => isListening ? stopListening() : startListening()}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold transition ${
-                isListening ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse' : 'bg-gray-700 hover:bg-gray-600 text-white'
-              }`}
+              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold transition ${isListening ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse' : 'bg-gray-700 hover:bg-gray-600 text-white'}`}
             >
               {isListening ? '🔴 Stop Recording' : '🎤 Speak Answer'}
             </button>
@@ -649,9 +710,7 @@ function Interview() {
           <button
             onClick={submitAnswer}
             disabled={loading}
-            className={`w-full text-white font-semibold py-3 rounded-xl transition disabled:opacity-50 ${
-              isWarning ? 'bg-red-600 hover:bg-red-700' : 'bg-purple-600 hover:bg-purple-700'
-            }`}
+            className={`w-full text-white font-semibold py-3 rounded-xl transition disabled:opacity-50 ${isWarning ? 'bg-red-600 hover:bg-red-700' : 'bg-purple-600 hover:bg-purple-700'}`}
           >
             {loading ? 'Getting AI Feedback...' : 'Submit Answer'}
           </button>
@@ -666,17 +725,13 @@ function Interview() {
       <div className="min-h-screen bg-gray-950 text-white">
         <nav className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center gap-3">
           <h1 className="text-xl font-bold text-purple-400">AI Interview Coach</h1>
-          <span className={`text-xs px-3 py-1 rounded-full border font-medium ${diffConfig.badge}`}>
-            {diffConfig.icon} {difficulty}
-          </span>
+          <span className={`text-xs px-3 py-1 rounded-full border font-medium ${diffConfig.badge}`}>{diffConfig.icon} {difficulty}</span>
         </nav>
         <div className="max-w-2xl mx-auto px-6 py-10">
           <h2 className="text-2xl font-bold mb-6">AI Feedback</h2>
           <div className="bg-gray-900 rounded-xl p-6 mb-4 border border-gray-800 text-center">
             <p className="text-gray-400 mb-2">Your Score</p>
-            <p className="text-6xl font-bold text-purple-400">
-              {feedback?.score}<span className="text-2xl text-gray-400">/10</span>
-            </p>
+            <p className="text-6xl font-bold text-purple-400">{feedback?.score}<span className="text-2xl text-gray-400">/10</span></p>
           </div>
           <div className="bg-gray-900 rounded-xl p-6 mb-4 border border-gray-800">
             <h3 className="text-purple-400 font-semibold mb-2">Feedback</h3>
@@ -707,15 +762,35 @@ function Interview() {
             </span>
           </div>
           <p className="text-gray-400 mb-6">Your overall score</p>
-          <p className="text-8xl font-bold text-purple-400 mb-8">
-            {score}<span className="text-3xl text-gray-400">/10</span>
-          </p>
+          <p className="text-8xl font-bold text-purple-400 mb-8">{score}<span className="text-3xl text-gray-400">/10</span></p>
+
           <div className="flex flex-col gap-4 max-w-sm mx-auto">
             <button onClick={downloadPDF} className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-3 rounded-xl transition">
-              Download PDF Report
+              📄 Download PDF Report
             </button>
+
+            {/* Video Download Button */}
+            {recordedVideoUrl && (
+              <button onClick={downloadVideo} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl transition">
+                🎥 Download Interview Video
+              </button>
+            )}
+
+            {/* Video Preview */}
+            {recordedVideoUrl && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-gray-400 text-sm mb-3 text-center">🎬 Your Interview Recording</p>
+                <video
+                  src={recordedVideoUrl}
+                  controls
+                  className="w-full rounded-xl"
+                  style={{ maxHeight: '200px' }}
+                />
+              </div>
+            )}
+
             <button
-              onClick={() => { setStep('select'); setDifficulty(''); setInterviewType(''); setSelectedCategories([]) }}
+              onClick={() => { setStep('select'); setDifficulty(''); setInterviewType(''); setSelectedCategories([]); setRecordedVideoUrl(null) }}
               className="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-6 py-3 rounded-xl transition"
             >
               Practice Again

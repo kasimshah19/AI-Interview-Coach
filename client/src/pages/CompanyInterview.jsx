@@ -150,34 +150,81 @@ function CompanyInterview() {
   const [totalTime, setTotalTime] = useState(0)
   const [showTimeUp, setShowTimeUp] = useState(false)
   const [timerActive, setTimerActive] = useState(false)
-
-  // Custom company states
   const [showCustomModal, setShowCustomModal] = useState(false)
   const [customCompanyName, setCustomCompanyName] = useState('')
   const [customRole, setCustomRole] = useState('')
   const [customError, setCustomError] = useState('')
+  const [videoEnabled, setVideoEnabled] = useState(false)
+  const [recordedVideoUrl, setRecordedVideoUrl] = useState(null)
+  const [cameraError, setCameraError] = useState('')
 
   const recognitionRef = useRef(null)
   const timerRef = useRef(null)
+  const videoRef = useRef(null)
+  const mediaRecorderRef = useRef(null)
+  const streamRef = useRef(null)
+  const chunksRef = useRef([])
   const navigate = useNavigate()
 
   const token = localStorage.getItem('token')
   const user = JSON.parse(localStorage.getItem('user') || '{}')
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      streamRef.current = stream
+      if (videoRef.current) videoRef.current.srcObject = stream
+      setVideoEnabled(true)
+      setCameraError('')
+      chunksRef.current = []
+      const recorder = new MediaRecorder(stream)
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'video/webm' })
+        setRecordedVideoUrl(URL.createObjectURL(blob))
+      }
+      recorder.start()
+      mediaRecorderRef.current = recorder
+    } catch (err) {
+      setCameraError('Camera access denied. Please allow camera permission.')
+      setVideoEnabled(false)
+    }
+  }
+
+  const stopCamera = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+    setVideoEnabled(false)
+  }, [])
+
+  const downloadVideo = () => {
+    if (!recordedVideoUrl) return
+    const a = document.createElement('a')
+    a.href = recordedVideoUrl
+    a.download = `interview-${selectedCompany?.name}-${new Date().toLocaleDateString()}.webm`
+    a.click()
+  }
+
+  useEffect(() => { return () => { stopCamera() } }, [stopCamera])
+
+  useEffect(() => {
+    if (videoEnabled && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+    }
+  }, [videoEnabled, step])
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
     setTimerActive(false)
   }, [])
 
-  const stopSpeaking = useCallback(() => {
-    window.speechSynthesis.cancel()
-    setIsSpeaking(false)
-  }, [])
-
-  const stopListening = useCallback(() => {
-    if (recognitionRef.current) recognitionRef.current.stop()
-    setIsListening(false)
-  }, [])
+  const stopSpeaking = useCallback(() => { window.speechSynthesis.cancel(); setIsSpeaking(false) }, [])
+  const stopListening = useCallback(() => { if (recognitionRef.current) recognitionRef.current.stop(); setIsListening(false) }, [])
 
   const handleTimeUpComplete = useCallback(async () => {
     setShowTimeUp(false)
@@ -192,16 +239,12 @@ function CompanyInterview() {
       setFeedback(response.data)
       setAllAnswers(prev => [...prev, { question: questions[currentQuestion], userAnswer: currentAnswer, score: response.data.score, aiFeedback: response.data.feedback }])
       setStep('feedback')
-    } catch (err) {
-      setStep('feedback')
-    } finally {
-      setLoading(false)
-    }
+    } catch (err) { setStep('feedback') }
+    finally { setLoading(false) }
   }, [answer, interviewId, currentQuestion, questions, token])
 
   const handleTimeUp = useCallback(() => {
-    stopTimer(); stopListening(); stopSpeaking()
-    setShowTimeUp(true)
+    stopTimer(); stopListening(); stopSpeaking(); setShowTimeUp(true)
   }, [stopTimer, stopListening, stopSpeaking])
 
   useEffect(() => {
@@ -254,35 +297,18 @@ function CompanyInterview() {
     }
   }, [step, currentQuestion])
 
-  // Handle custom company submit
   const handleCustomCompany = () => {
-    if (!customCompanyName.trim()) {
-      setCustomError('Please enter company name')
-      return
-    }
+    if (!customCompanyName.trim()) { setCustomError('Please enter company name'); return }
     const customCompany = {
-      id: 'custom',
-      name: customCompanyName.trim(),
-      emoji: '🏭',
-      color: 'from-purple-600 to-pink-500',
-      border: 'border-purple-500',
-      bg: 'bg-purple-900/20',
-      category: 'Custom',
-      role: customRole.trim() || 'Software Engineer',
+      id: 'custom', name: customCompanyName.trim(), emoji: '🏭',
+      color: 'from-purple-600 to-pink-500', border: 'border-purple-500', bg: 'bg-purple-900/20',
+      category: 'Custom', role: customRole.trim() || 'Software Engineer',
       style: `${customCompanyName.trim()} interview style`,
-      tips: [
-        'Research the company thoroughly',
-        'Understand their products and services',
-        'Prepare for both technical and HR questions',
-        'Show enthusiasm for the company',
-        'Ask thoughtful questions at the end'
-      ]
+      tips: ['Research the company thoroughly', 'Understand their products and services', 'Prepare for both technical and HR questions', 'Show enthusiasm for the company', 'Ask thoughtful questions at the end']
     }
     setSelectedCompany(customCompany)
     setShowCustomModal(false)
-    setCustomCompanyName('')
-    setCustomRole('')
-    setCustomError('')
+    setCustomCompanyName(''); setCustomRole(''); setCustomError('')
     setStep('tips')
   }
 
@@ -291,23 +317,15 @@ function CompanyInterview() {
     try {
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL}/api/interview/start`,
-        {
-          interviewType: selectedCompany.id === 'custom' ? 'HR' : selectedCompany.name,
-          companyName: selectedCompany.name,
-          companyStyle: selectedCompany.style,
-          role: selectedCompany.role
-        },
+        { interviewType: selectedCompany.id === 'custom' ? 'HR' : selectedCompany.name, companyName: selectedCompany.name, companyStyle: selectedCompany.style, role: selectedCompany.role },
         { headers: { Authorization: `Bearer ${token}` } }
       )
       setQuestions(response.data.questions)
       setInterviewId(response.data.interviewId)
       setStep('interview')
       startTimer(selectedCompany.id)
-    } catch (err) {
-      alert('Failed to start interview!')
-    } finally {
-      setLoading(false)
-    }
+    } catch (err) { alert('Failed to start interview!') }
+    finally { setLoading(false) }
   }
 
   const submitAnswer = async () => {
@@ -323,15 +341,13 @@ function CompanyInterview() {
       setFeedback(response.data)
       setAllAnswers(prev => [...prev, { question: questions[currentQuestion], userAnswer: answer, score: response.data.score, aiFeedback: response.data.feedback }])
       setStep('feedback')
-    } catch (err) {
-      alert('Failed to submit answer!')
-    } finally {
-      setLoading(false)
-    }
+    } catch (err) { alert('Failed to submit answer!') }
+    finally { setLoading(false) }
   }
 
   const nextQuestion = async () => {
     if (currentQuestion + 1 >= questions.length) {
+      stopCamera()
       try {
         const response = await axios.post(
           `${import.meta.env.VITE_API_URL}/api/interview/complete`,
@@ -354,97 +370,66 @@ function CompanyInterview() {
       userName: user.name || 'Candidate',
       interviewType: `${selectedCompany.name} Interview`,
       date: new Date().toLocaleDateString(),
-      overallScore: score,
-      questions: allAnswers
+      overallScore: score, questions: allAnswers
     })
   }
 
   const isWarning = timeLeft <= 30 && timeLeft > 0
   const filteredCompanies = filterCategory === 'All' ? COMPANIES : COMPANIES.filter(c => c.category === filterCategory)
 
-  // Select Company Screen
+  // Select Screen
   if (step === 'select') {
     return (
       <div className="min-h-screen bg-gray-950 text-white">
         <nav className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex justify-between items-center">
           <h1 className="text-xl font-bold text-purple-400">🏢 Company Interviews</h1>
-          <button onClick={() => navigate('/dashboard')} className="text-gray-400 hover:text-white text-sm transition">
-            ← Dashboard
-          </button>
+          <button onClick={() => navigate('/dashboard')} className="text-gray-400 hover:text-white text-sm transition">← Dashboard</button>
         </nav>
-
         <div className="max-w-5xl mx-auto px-6 py-10">
           <div className="text-center mb-10">
             <h2 className="text-4xl font-bold mb-3">Choose Your Target Company</h2>
             <p className="text-gray-400 text-lg">Practice with real company-specific interview questions</p>
           </div>
-
-          {/* Filter */}
           <div className="flex gap-3 justify-center mb-8">
             {['All', 'FAANG', 'Indian IT'].map(cat => (
-              <button
-                key={cat}
-                onClick={() => setFilterCategory(cat)}
-                className={`px-5 py-2 rounded-full text-sm font-semibold transition ${
-                  filterCategory === cat ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
-                }`}
-              >
-                {cat}
-              </button>
+              <button key={cat} onClick={() => setFilterCategory(cat)}
+                className={`px-5 py-2 rounded-full text-sm font-semibold transition ${filterCategory === cat ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+              >{cat}</button>
             ))}
           </div>
-
-          {/* Company Grid */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
             {filteredCompanies.map((company) => (
-              <button
-                key={company.id}
-                onClick={() => { setSelectedCompany(company); setStep('tips') }}
+              <button key={company.id} onClick={() => { setSelectedCompany(company); setStep('tips') }}
                 className={`${company.bg} border ${company.border} rounded-2xl p-5 text-center hover:scale-105 transition-all duration-200 group`}
               >
                 <div className="text-5xl mb-3">{company.emoji}</div>
                 <p className="font-bold text-lg group-hover:text-white">{company.name}</p>
                 <p className="text-gray-400 text-xs mt-1">{company.role}</p>
-                <span className={`inline-block mt-2 text-xs px-2 py-1 rounded-full bg-gradient-to-r ${company.color} text-white`}>
-                  {company.category}
-                </span>
+                <span className={`inline-block mt-2 text-xs px-2 py-1 rounded-full bg-gradient-to-r ${company.color} text-white`}>{company.category}</span>
               </button>
             ))}
-
-            {/* Custom Company Card */}
-            <button
-              onClick={() => setShowCustomModal(true)}
+            <button onClick={() => setShowCustomModal(true)}
               className="border-2 border-dashed border-gray-600 hover:border-purple-500 rounded-2xl p-5 text-center hover:scale-105 transition-all duration-200 group bg-gray-900/50"
             >
               <div className="text-5xl mb-3">➕</div>
               <p className="font-bold text-lg text-gray-400 group-hover:text-purple-400">Custom Company</p>
               <p className="text-gray-500 text-xs mt-1">Any company</p>
-              <span className="inline-block mt-2 text-xs px-2 py-1 rounded-full bg-gray-700 text-gray-300">
-                Custom
-              </span>
+              <span className="inline-block mt-2 text-xs px-2 py-1 rounded-full bg-gray-700 text-gray-300">Custom</span>
             </button>
           </div>
-
-          {/* Custom Company Info */}
           <div className="bg-purple-900/20 border border-purple-700/30 rounded-xl p-4 text-center">
-            <p className="text-purple-400 text-sm">
-              🔍 Don't see your target company? Click <strong>"Custom Company"</strong> to practice for any company — Flipkart, Zomato, Swiggy, Startup, or any other!
-            </p>
+            <p className="text-purple-400 text-sm">🔍 Don't see your target company? Click <strong>"Custom Company"</strong> to practice for any company!</p>
           </div>
         </div>
 
-        {/* Custom Company Modal */}
         {showCustomModal && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4">
             <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8 w-full max-w-md">
               <h3 className="text-2xl font-bold mb-2">Custom Company</h3>
               <p className="text-gray-400 text-sm mb-6">Enter any company name — AI will generate questions accordingly</p>
-
               <div className="mb-4">
                 <label className="text-gray-400 text-sm mb-2 block">Company Name *</label>
-                <input
-                  type="text"
-                  value={customCompanyName}
+                <input type="text" value={customCompanyName}
                   onChange={e => { setCustomCompanyName(e.target.value); setCustomError('') }}
                   placeholder="e.g. Flipkart, Zomato, Razorpay..."
                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-purple-500 transition"
@@ -452,32 +437,19 @@ function CompanyInterview() {
                 />
                 {customError && <p className="text-red-400 text-xs mt-1">{customError}</p>}
               </div>
-
               <div className="mb-6">
                 <label className="text-gray-400 text-sm mb-2 block">Role (Optional)</label>
-                <input
-                  type="text"
-                  value={customRole}
-                  onChange={e => setCustomRole(e.target.value)}
+                <input type="text" value={customRole} onChange={e => setCustomRole(e.target.value)}
                   placeholder="e.g. Software Engineer, Product Manager..."
                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-purple-500 transition"
                   onKeyDown={e => e.key === 'Enter' && handleCustomCompany()}
                 />
               </div>
-
               <div className="flex gap-3">
-                <button
-                  onClick={() => { setShowCustomModal(false); setCustomCompanyName(''); setCustomRole(''); setCustomError('') }}
-                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-400 font-semibold py-3 rounded-xl transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCustomCompany}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition"
-                >
-                  Start Practice →
-                </button>
+                <button onClick={() => { setShowCustomModal(false); setCustomCompanyName(''); setCustomRole(''); setCustomError('') }}
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-400 font-semibold py-3 rounded-xl transition">Cancel</button>
+                <button onClick={handleCustomCompany}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition">Start Practice →</button>
               </div>
             </div>
           </div>
@@ -494,7 +466,6 @@ function CompanyInterview() {
           <h1 className="text-xl font-bold text-purple-400">🏢 Company Interviews</h1>
           <button onClick={() => setStep('select')} className="text-gray-400 hover:text-white text-sm transition">← Back</button>
         </nav>
-
         <div className="max-w-2xl mx-auto px-6 py-10">
           <div className={`${selectedCompany.bg} border ${selectedCompany.border} rounded-2xl p-8 mb-6 text-center`}>
             <div className="text-7xl mb-4">{selectedCompany.emoji}</div>
@@ -502,19 +473,15 @@ function CompanyInterview() {
             <p className="text-gray-400 mb-2">{selectedCompany.role}</p>
             <p className="text-sm text-gray-500">{selectedCompany.style}</p>
           </div>
-
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-semibold">⏱️ Time per question</p>
                 <p className="text-gray-400 text-sm">Auto-submit when timer ends</p>
               </div>
-              <p className="text-2xl font-bold text-purple-400">
-                {Math.floor((TIMER_CONFIG[selectedCompany.id] || 180) / 60)} min
-              </p>
+              <p className="text-2xl font-bold text-purple-400">{Math.floor((TIMER_CONFIG[selectedCompany.id] || 180) / 60)} min</p>
             </div>
           </div>
-
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-6">
             <h3 className="text-lg font-bold mb-4">💡 Interview Tips for {selectedCompany.name}</h3>
             <div className="space-y-3">
@@ -526,10 +493,7 @@ function CompanyInterview() {
               ))}
             </div>
           </div>
-
-          <button
-            onClick={startInterview}
-            disabled={loading}
+          <button onClick={startInterview} disabled={loading}
             className={`w-full bg-gradient-to-r ${selectedCompany.color} text-white font-bold py-4 rounded-xl transition text-lg disabled:opacity-50`}
           >
             {loading ? 'Generating Questions...' : `Start ${selectedCompany.name} Interview 🚀`}
@@ -539,21 +503,33 @@ function CompanyInterview() {
     )
   }
 
-  // Interview Screen
+  // ✅ INTERVIEW SCREEN — SIDE BY SIDE LAYOUT
   if (step === 'interview') {
     return (
       <div className="min-h-screen bg-gray-950 text-white">
         {showTimeUp && <TimeUpAnimation onComplete={handleTimeUpComplete} />}
+
         {isWarning && (
           <div className="fixed top-0 left-0 right-0 bg-red-600/20 border-b border-red-500 py-2 text-center z-40">
             <p className="text-red-400 font-semibold animate-pulse">⚠️ Only {timeLeft} seconds remaining!</p>
           </div>
         )}
 
+        {/* Navbar */}
         <nav className={`bg-gray-900 border-b border-gray-800 px-6 py-4 flex justify-between items-center ${isWarning ? 'mt-10' : ''}`}>
           <div className="flex items-center gap-3">
             <span className="text-2xl">{selectedCompany.emoji}</span>
             <h1 className="text-xl font-bold text-purple-400">{selectedCompany.name} Interview</h1>
+            <button
+              onClick={videoEnabled ? stopCamera : startCamera}
+              className={`text-xs px-3 py-1 rounded-full border font-medium transition ${
+                videoEnabled
+                  ? 'bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30'
+                  : 'bg-gray-800 text-gray-400 border-gray-600 hover:border-purple-500 hover:text-purple-400'
+              }`}
+            >
+              {videoEnabled ? '📹 Stop Camera' : '📷 Start Camera'}
+            </button>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-gray-400 text-sm">Q {currentQuestion + 1}/{questions.length}</span>
@@ -561,54 +537,139 @@ function CompanyInterview() {
           </div>
         </nav>
 
-        <div className="max-w-2xl mx-auto px-6 py-8">
-          <div className="w-full bg-gray-800 rounded-full h-2 mb-6">
+        {cameraError && (
+          <div className="bg-red-900/20 border-b border-red-500/30 px-6 py-2 text-center">
+            <p className="text-red-400 text-sm">⚠️ {cameraError}</p>
+          </div>
+        )}
+
+        {/* Progress Bar */}
+        <div className="px-6 pt-4">
+          <div className="w-full bg-gray-800 rounded-full h-2">
             <div className={`h-2 rounded-full transition-all bg-gradient-to-r ${selectedCompany.color}`}
               style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }} />
           </div>
+        </div>
 
-          <div className={`rounded-xl p-6 mb-4 border transition-all ${isWarning ? 'bg-red-900/10 border-red-500/30' : `${selectedCompany.bg} ${selectedCompany.border}`}`}>
-            <p className="text-sm text-purple-400 font-medium mb-3">
-              {selectedCompany.name} Interview - Question {currentQuestion + 1}
-            </p>
-            <p className="text-xl font-medium mb-4">{questions[currentQuestion]}</p>
-            <button
-              onClick={() => isSpeaking ? stopSpeaking() : speakQuestion(questions[currentQuestion])}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 transition"
-            >
-              {isSpeaking ? '🔇 Stop' : '🔊 Hear Question'}
-            </button>
-          </div>
+        {/* SIDE BY SIDE LAYOUT */}
+        <div className="flex gap-4 px-6 py-6 h-[calc(100vh-140px)]">
 
-          <textarea
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-            placeholder="Type your answer or use microphone..."
-            rows={5}
-            className="w-full bg-gray-900 text-white px-4 py-3 rounded-xl border border-gray-700 focus:outline-none focus:border-purple-500 resize-none mb-4"
-          />
+          {/* LEFT — Question + Answer */}
+          <div className="flex-1 flex flex-col gap-4 overflow-y-auto">
 
-          <div className="flex gap-3 mb-4">
-            <button
-              onClick={() => isListening ? stopListening() : startListening()}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold transition ${
-                isListening ? 'bg-red-600 text-white animate-pulse' : 'bg-gray-700 hover:bg-gray-600 text-white'
+            {/* Question Box */}
+            <div className={`rounded-xl p-6 border transition-all ${isWarning ? 'bg-red-900/10 border-red-500/30' : `${selectedCompany.bg} ${selectedCompany.border}`}`}>
+              <p className="text-sm text-purple-400 font-medium mb-3">
+                {selectedCompany.name} — Question {currentQuestion + 1} of {questions.length}
+              </p>
+              <p className="text-xl font-medium mb-4 leading-relaxed">{questions[currentQuestion]}</p>
+              <button
+                onClick={() => isSpeaking ? stopSpeaking() : speakQuestion(questions[currentQuestion])}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 transition"
+              >
+                {isSpeaking ? '🔇 Stop' : '🔊 Hear Question'}
+              </button>
+            </div>
+
+            {/* Answer Box */}
+            <textarea
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              placeholder="Type your answer or use microphone..."
+              className={`flex-1 text-white px-4 py-3 rounded-xl border focus:outline-none resize-none transition-all ${
+                isWarning ? 'bg-red-900/10 border-red-500/50' : 'bg-gray-900 border-gray-700 focus:border-purple-500'
               }`}
+              style={{ minHeight: '160px' }}
+            />
+
+            {/* Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => isListening ? stopListening() : startListening()}
+                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold transition ${
+                  isListening ? 'bg-red-600 text-white animate-pulse' : 'bg-gray-700 hover:bg-gray-600 text-white'
+                }`}
+              >
+                {isListening ? '🔴 Stop Recording' : '🎤 Speak Answer'}
+              </button>
+              <button onClick={() => setAnswer('')} className="px-4 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-400 transition">
+                Clear
+              </button>
+            </div>
+
+            {isListening && (
+              <div className="bg-red-900/20 border border-red-500 rounded-xl p-3 text-center">
+                <p className="text-red-400 text-sm animate-pulse">🎙️ Listening... Speak now!</p>
+              </div>
+            )}
+
+            <button
+              onClick={submitAnswer}
+              disabled={loading}
+              className={`w-full text-white font-semibold py-3 rounded-xl transition disabled:opacity-50 bg-gradient-to-r ${selectedCompany.color}`}
             >
-              {isListening ? '🔴 Stop' : '🎤 Speak'}
-            </button>
-            <button onClick={() => setAnswer('')} className="px-4 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-400 transition">
-              Clear
+              {loading ? 'Getting AI Feedback...' : 'Submit Answer'}
             </button>
           </div>
 
-          <button
-            onClick={submitAnswer}
-            disabled={loading}
-            className={`w-full text-white font-semibold py-3 rounded-xl transition disabled:opacity-50 bg-gradient-to-r ${selectedCompany.color}`}
-          >
-            {loading ? 'Getting AI Feedback...' : 'Submit Answer'}
-          </button>
+          {/* RIGHT — Camera Feed */}
+          <div className="w-80 flex-shrink-0 flex flex-col gap-3">
+            {videoEnabled ? (
+              <div className="relative flex-1 rounded-2xl overflow-hidden border-2 border-purple-500 bg-black">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover"
+                  style={{ minHeight: '300px' }}
+                />
+                {/* REC indicator */}
+                <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/60 px-3 py-1 rounded-full">
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></div>
+                  <span className="text-xs text-white font-bold">REC</span>
+                </div>
+                {/* Stop button */}
+                <button
+                  onClick={stopCamera}
+                  className="absolute top-3 right-3 bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1 rounded-full transition"
+                >
+                  ✕ Stop
+                </button>
+                {/* Bottom label */}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+                  <p className="text-white text-sm font-medium text-center">📹 You are being recorded</p>
+                  <p className="text-gray-400 text-xs text-center mt-1">Face the camera naturally</p>
+                </div>
+              </div>
+            ) : (
+              /* Camera OFF state */
+              <div className="flex-1 rounded-2xl border-2 border-dashed border-gray-700 bg-gray-900 flex flex-col items-center justify-center gap-4 p-6"
+                style={{ minHeight: '300px' }}
+              >
+                <div className="text-6xl">📷</div>
+                <p className="text-gray-400 text-center text-sm">Camera is off</p>
+                <p className="text-gray-600 text-center text-xs">Click "Start Camera" in navbar to enable video recording</p>
+                <button
+                  onClick={startCamera}
+                  className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold px-5 py-2 rounded-xl transition"
+                >
+                  📷 Start Camera
+                </button>
+              </div>
+            )}
+
+            {/* Tips box below camera */}
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+              <p className="text-xs text-gray-400 font-medium mb-2">💡 Quick Tips</p>
+              <ul className="space-y-1">
+                <li className="text-xs text-gray-500">• Maintain eye contact with camera</li>
+                <li className="text-xs text-gray-500">• Speak clearly and confidently</li>
+                <li className="text-xs text-gray-500">• Sit in good lighting</li>
+              </ul>
+            </div>
+          </div>
+
         </div>
       </div>
     )
@@ -656,8 +717,19 @@ function CompanyInterview() {
             <button onClick={downloadPDF} className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-3 rounded-xl transition">
               📄 Download PDF Report
             </button>
+            {recordedVideoUrl && (
+              <button onClick={downloadVideo} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl transition">
+                🎥 Download Interview Video
+              </button>
+            )}
+            {recordedVideoUrl && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-gray-400 text-sm mb-3 text-center">🎬 Your Interview Recording</p>
+                <video src={recordedVideoUrl} controls className="w-full rounded-xl" style={{ maxHeight: '200px' }} />
+              </div>
+            )}
             <button
-              onClick={() => { setStep('select'); setSelectedCompany(null) }}
+              onClick={() => { setStep('select'); setSelectedCompany(null); setRecordedVideoUrl(null) }}
               className={`bg-gradient-to-r ${selectedCompany.color} text-white font-semibold px-6 py-3 rounded-xl transition`}
             >
               Try Another Company

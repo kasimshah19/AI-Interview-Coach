@@ -24,10 +24,10 @@ router.post('/start', authMiddleware, async (req, res) => {
       ? `Focus specifically on these topics: ${categories.join(', ')}.`
       : ''
 
-    const prompt = `Generate 5 ${interviewType} interview questions ${difficultyText}
+    const prompt = `Generate 20 ${interviewType} interview questions ${difficultyText}
     ${categoriesText}
-    Return ONLY a JSON array like this:
-    ["question1", "question2", "question3", "question4", "question5"]
+    Return ONLY a JSON array of exactly 20 questions like this:
+    ["question1", "question2", "question3", ... "question20"]
     No extra text, only JSON array.`;
 
     const completion = await getGroq().chat.completions.create({
